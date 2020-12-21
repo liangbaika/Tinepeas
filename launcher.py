@@ -1,3 +1,4 @@
 from tinepeas import run
 
-run('ipspider')
+if __name__ == '__main__':
+    run('ipspider')
