@@ -1,3 +1,5 @@
+import threading
+
 from tinepeas import Spider, Request
 
 
@@ -12,3 +14,10 @@ class IpSpider(Spider):
 
     def parse(self, response):
         print(response.body)
+        print(threading.current_thread().name,"runing...",self.name)
+        yield Request(response.url, callback=self.parse2)
+        print(2222)
+
+    def parse2(self, response):
+        print(333)
+        pass

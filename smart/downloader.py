@@ -6,40 +6,127 @@
 # Desc:      there is a python file description
 # ------------------------------------------------------------------
 import asyncio
+import inspect
 from asyncio import Queue, QueueEmpty
+from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import suppress
+from inspect import isawaitable
 from typing import Optional
-
 import aiohttp
 from concurrent.futures import TimeoutError
+
+import typing
+
+import requests
+from aiohttp import ClientTimeout
+
+from smart import log
+from smart.middlewire import Middleware
 from smart.response import Response
+from smart.scheduler import Scheduler
 from .request import Request
 
 
 class Downloader:
-    def __init__(self):
+
+    def __init__(self, scheduler: Scheduler, middwire: Middleware = None):
+        self.scheduler = scheduler
+        self.middwire = middwire
         self.response_queue: asyncio.Queue = Queue()
+        # 总和不要超过500   多个spider的话  '并发' 很容易超过500 导致文件描述符打开过多 windows 超过500就会报错
+        self.semaphore = asyncio.Semaphore(1000)
+        self.max_retry = 2
 
     async def download(self, request: Request):
-        async with aiohttp.ClientSession() as clicnt:
-            try:
-                resp = await clicnt.request(request.method,
-                                            request.url,
-                                            headers=request.header,
-                                            cookies=request.cookies,
-                                            data=request.data,
-                                            **request.extras
-                                            )
-            except TimeoutError as e:
-                print(e)
-                return
-            byte_content = await resp.read()
-        response = Response(body=byte_content, request=request, status=resp.status)
-        response.raw_response = resp
-        await self.response_queue.put(response)
+        if request and request.retry >= self.max_retry:
+            # reached max retry times
+            log.get_logger().error(f'reached max retry times... {request}')
+            return
+        request.retry = request.retry + 1
+        # when canceled
+        loop = asyncio.get_running_loop()
+        if loop.is_closed() or not loop.is_running():
+            log.get_logger().warning(f'loop is closed in download')
+            return
+        with suppress(asyncio.CancelledError):
+            iscoroutinefunction = inspect.iscoroutinefunction(self.fetch)
+            async  with self.semaphore:
+                if self.middwire and len(self.middwire.request_middleware) > 0:
+                    for item_tuple in self.middwire.request_middleware:
+                        if callable(item_tuple[1]):
+                            if inspect.iscoroutinefunction(item_tuple[1]):
+                                res = await item_tuple[1](request.__spider__, request)
+                            else:
+                                res = await asyncio.get_event_loop() \
+                                    .run_in_executor(None, item_tuple[1], request.__spider__, request)
+
+                if iscoroutinefunction:
+                    response = await self.fetch(request)
+                else:
+                    log.get_logger().debug(f'fetch may be an snyc func  so it will run in executor ')
+                    response = await asyncio.get_event_loop() \
+                        .run_in_executor(None, self.fetch, request)
+
+                if response and self.middwire and len(self.middwire.response_middleware) > 0:
+                    for item_tuple in self.middwire.response_middleware:
+                        if callable(item_tuple[1]):
+                            if inspect.iscoroutinefunction(item_tuple[1]):
+                                res = await item_tuple[1](request.__spider__, request,response)
+                            else:
+                                res = await asyncio.get_event_loop() \
+                                    .run_in_executor(None, item_tuple[1], request.__spider__,request, response)
+
+        if response:
+            response.__spider__ = request.__spider__
+            await self.response_queue.put(response)
 
     def get(self) -> Optional[Response]:
-        try:
+        with suppress(QueueEmpty):
             response = self.response_queue.get_nowait()
-        except QueueEmpty:
-            return None
+            return response
+
+    # def fetch(self, request: Request) -> Response:
+    #     try:
+    #         res = requests.get(request.url,
+    #                            timeout=request.timeout or 3 ,
+    #                            )
+    #     except Exception as e:
+    #         return
+    #     response = Response(body=res.content, request=request,
+    #                         headers=res.headers,
+    #                         cookies=res.cookies,
+    #                         status=res.status_code)
+    #     return response
+    async def fetch(self, request: Request) -> Response:
+
+        async with aiohttp.ClientSession() as clicnt:
+            try:
+                log.get_logger().debug(f'url {request.url} will send a request to fetch resource ..')
+                async with clicnt.request(request.method,
+                                          request.url,
+                                          timeout=request.timeout or 10,
+                                          headers=request.header or {},
+                                          cookies=request.cookies or {},
+                                          data=request.data or {},
+                                          **request.extras or {}
+                                          ) as resp:
+                    byte_content = await resp.read()
+            except TimeoutError as e:
+                # delay retry
+                self.scheduler.schedlue(request)
+                log.get_logger().debug(
+                    f'req  to fetch is timeout now so this req will dely to sechdule for retry {request.url}')
+                return
+            except asyncio.CancelledError as e:
+                log.get_logger().error(f' task is cancel..')
+                return
+            except BaseException as e:
+                log.get_logger().error(f'occured some exception in downloader e:{e}')
+                return
+
+        headers = {k: v for k, v in resp.headers.items()}
+        response = Response(body=byte_content, request=request,
+                            headers=headers,
+                            cookies=resp.cookies,
+                            status=resp.status)
         return response

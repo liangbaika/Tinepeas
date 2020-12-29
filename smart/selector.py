@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from typing import Union, List, Iterable, Any
+
 from lxml.html import HtmlElement, fromstring
 
 
@@ -21,7 +22,7 @@ class Selector:
         if self._selector is None:
             self._selector = fromstring(self.html)
         selector_list = self._selector.xpath(xpath_str)
-        return SelectorList(Selector(html=self.html, selector=x) for x in selector_list)
+        return SelectorList(Selector(selector=x) for x in selector_list)
 
     def __repr__(self):
         return str(self._selector)
