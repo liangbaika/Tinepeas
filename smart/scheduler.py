@@ -5,8 +5,6 @@
 # Date:      2020/12/21
 # Desc:      there is a python file description
 # ------------------------------------------------------------------
-import asyncio
-from asyncio import Queue
 from collections import deque
 from typing import Optional
 
@@ -35,7 +33,6 @@ class SampleDuplicateFilter(BaseDuplicateFilter):
 
     def __init__(self):
         self.set_container = set()
-        self.set_container = set()
 
     def add(self, url):
         if url:
@@ -53,9 +50,11 @@ class SampleDuplicateFilter(BaseDuplicateFilter):
 
 
 class Scheduler:
-    def __init__(self):
+    def __init__(self, duplicate_filter: BaseDuplicateFilter = None):
         self.request_queue = deque()
-        self.duplicate_filter = SampleDuplicateFilter()
+        if duplicate_filter is None:
+            duplicate_filter = SampleDuplicateFilter()
+        self.duplicate_filter = duplicate_filter
 
     def schedlue(self, request: Request):
         log.get_logger().debug(f"get a request {request} wating toschedlue ")

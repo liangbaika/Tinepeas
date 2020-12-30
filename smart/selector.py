@@ -44,7 +44,10 @@ class SelectorList:
         return default
 
     def getall(self) -> List[Union[str, Selector]]:
-        return list(self._selector_list)
+        res = list(self._selector_list)
+        if len(res) > 0:
+            return [str(x) for x in res]
+        return []
 
     def __iter__(self):
         for selector in self._selector_list:

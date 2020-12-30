@@ -13,7 +13,19 @@ from smart.request import Request
 from smart.response import Response
 
 
-class Spider(ABC):
+class SpiderHook(ABC):
+
+    def on_start(self):
+        pass
+
+    def on_close(self):
+        pass
+
+    def on_exception_occured(self, e: Exception):
+        pass
+
+
+class Spider(SpiderHook):
     name: str = f'smart-spider-{uuid.uuid4()}'
     state: int = 0
     start_urls: List[str] = []

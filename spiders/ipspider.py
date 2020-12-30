@@ -1,23 +1,21 @@
-import threading
 
 from tinepeas import Spider, Request
 
 
 class IpSpider(Spider):
     name = 'ipspider'
-    start_urls = []
-
-    def start_requests(self):
-        for page in range(1, 1000):
-            url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
-            yield Request(url, callback=self.parse)
+    start_urls = [
+        "http://www.nea.gov.cn/xwzx/nyyw.htm"
+    ]
 
     def parse(self, response):
-        print(response.body)
-        print(threading.current_thread().name,"runing...",self.name)
-        yield Request(response.url, callback=self.parse2)
-        print(2222)
+        print("run parse...........................................")
+        print(response.status)
+        res = response.xpath("/html/body//div/ul[@class='list']/li/a/@href")
+        getall = res.getall()
+        for _url in getall:
+            yield Request(url=str(_url), callback=self.parse_detail, dont_filter=True)
+            print(22)
 
-    def parse2(self, response):
+    def parse_detail(self, response):
         print(333)
-        pass

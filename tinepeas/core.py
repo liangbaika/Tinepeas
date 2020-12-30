@@ -50,7 +50,7 @@ class Core:
                 self.task_dict[uuid.uuid4()] = task
             resp = downloader.get()
             if not resp:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.005)
                 continue
             print('get response of: ', resp.url)
             callback = resp.request.callback
@@ -59,7 +59,7 @@ class Core:
                 self.request_generator_queue.append(request_generator)
             self.check_task_done()
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(3)
 
 
 if __name__ == '__main__':
