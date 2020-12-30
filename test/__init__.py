@@ -29,14 +29,3 @@ def print_on_response(spider_ins, request, response):
 
 
 
-def test():
-    for i in range(11):
-        yield i
-
-async  def main22():
-    future = asyncio.create_task(test)
-    await asyncio.wait(future)
-
-if __name__ == '__main__':
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(main22)

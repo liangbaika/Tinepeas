@@ -1,3 +1,4 @@
+import json
 import threading
 
 from lxml import etree
@@ -87,6 +88,26 @@ class GovSpider(Spider):
 
     def on_close(self):
         print(' GovSpider 关闭了')
+
+    def on_exception_occured(self, e: Exception):
+        print(e)
+
+
+class ApiSpider(Spider):
+    name = 'ApiSpider'
+
+    def on_start(self):
+        print('ApiSpider started')
+
+    def start_requests(self):
+        for i in range(1000):
+            yield Request(url="http://127.0.0.1:8000/", callback=self.parse,dont_filter=True
+                          )
+
+    def parse(self, response: Response):
+        print("run parse...........................................")
+        print(response.status)
+        print(response.text)
 
     def on_exception_occured(self, e: Exception):
         print(e)

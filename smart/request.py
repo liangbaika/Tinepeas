@@ -12,7 +12,7 @@ from typing import Callable
 @dataclass
 class Request:
     url: str
-    callback: Callable
+    callback: Callable = None
     method: str = 'get'
     timeout: float = 10.0
     encoding: str = 'utf-8'

@@ -30,6 +30,7 @@ class Spider(SpiderHook):
     state: int = 0
     start_urls: List[str] = []
 
+
     def start_requests(self):
         for url in self.start_urls:
             yield Request(url=url, callback=self.parse)
