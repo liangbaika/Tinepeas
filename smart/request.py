@@ -18,13 +18,15 @@ class Request:
     encoding: str = 'utf-8'
     header: dict = None
     cookies: dict = None
-    # post 数据
+    # post data
     data: any = None
-    # request内的其他请求参数 比如 proxy  等
+    # aiohttp requets kwargs..
     extras: dict = None
-    # 不同的回调函数可以借此传递数据
+    # different callback functions can be delivered
     meta: dict = None
+    # do not filter repeat url
     dont_filter: bool = False
+    # no more than  max retry times  and retry is delay retry
     _retry: int = 0
 
     def __repr__(self):

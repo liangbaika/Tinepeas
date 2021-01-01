@@ -55,19 +55,21 @@ class Scheduler:
         if duplicate_filter is None:
             duplicate_filter = SampleDuplicateFilter()
         self.duplicate_filter = duplicate_filter
+        self.log = log.get_logger("smart-scheduler")
+
 
     def schedlue(self, request: Request):
-        log.get_logger().debug(f"get a request {request} wating toschedlue ")
+        self.log.debug(f"get a request {request} wating toschedlue ")
         if not request.dont_filter:
             _url = request.url + ":" + str(request.retry)
             if self.duplicate_filter.contains(_url):
-                log.get_logger().debug(f"duplicate_filter filted ... url{_url} ")
+                self.log.debug(f"duplicate_filter filted ... url{_url} ")
                 return
             self.duplicate_filter.add(_url)
         self.request_queue.append(request)
 
     def get(self) -> Optional[Request]:
-        log.get_logger().debug(f"get a request to download task ")
+        self.log.debug(f"get a request to download task ")
         if self.request_queue:
             return self.request_queue.popleft()
         return None

@@ -27,20 +27,21 @@ class Downloader:
         self.middwire = middwire
         self.response_queue: asyncio.Queue = Queue()
         #  the file handle opens too_much to report an error
-        self.semaphore = asyncio.Semaphore(1000)
+        self.semaphore = asyncio.Semaphore(500)
         # starting from 0
         self.max_retry = 3
+        self.log = log.get_logger("smart-downloader")
 
     async def download(self, request: Request):
         if request and request.retry >= self.max_retry:
             # reached max retry times
-            log.get_logger().error(f'reached max retry times... {request}')
+            self.log.error(f'reached max retry times... {request}')
             return
         request.retry = request.retry + 1
         # when canceled
         loop = asyncio.get_running_loop()
         if loop.is_closed() or not loop.is_running():
-            log.get_logger().warning(f'loop is closed in download')
+            self.log.warning(f'loop is closed in download')
             return
         with suppress(asyncio.CancelledError):
             async  with self.semaphore:
@@ -52,7 +53,7 @@ class Downloader:
                 if iscoroutinefunction:
                     response = await fetch(request)
                 else:
-                    log.get_logger().debug(f'fetch may be an snyc func  so it will run in executor ')
+                    self.log.debug(f'fetch may be an snyc func  so it will run in executor ')
                     response = await asyncio.get_event_loop() \
                         .run_in_executor(None, fetch, request)
 
@@ -72,7 +73,7 @@ class Downloader:
     async def fetch(self, request: Request) -> Response:
         async with aiohttp.ClientSession() as clicnt:
             try:
-                log.get_logger().debug(f'url {request.url} will send a request to fetch resource ..')
+                self.log.debug(f'url {request.url} will send a request to fetch resource ..')
                 resp = await clicnt.request(request.method,
                                             request.url,
                                             timeout=request.timeout or 10,
@@ -85,14 +86,14 @@ class Downloader:
             except TimeoutError as e:
                 # delay retry
                 self.scheduler.schedlue(request)
-                log.get_logger().debug(
+                self.log.debug(
                     f'req  to fetch is timeout now so this req will dely to sechdule for retry {request.url}')
                 return
             except asyncio.CancelledError as e:
-                log.get_logger().error(f' task is cancel..')
+                self.log.error(f' task is cancel..')
                 return
             except BaseException as e:
-                log.get_logger().error(f'occured some exception in downloader e:{e}')
+                self.log.error(f'occured some exception in downloader e:{e}')
                 return
         headers = {}
         if resp.headers:

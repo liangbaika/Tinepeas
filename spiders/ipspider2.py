@@ -2,9 +2,16 @@ import json
 import threading
 
 from lxml import etree
+
+from smart.item import Item
 from smart.response import Response
 from smart.request import Request
 from smart.spider import Spider
+
+
+class TestItem(Item):
+    name = "23232"
+    age = 900
 
 
 class IpSpider(Spider):
@@ -12,19 +19,27 @@ class IpSpider(Spider):
     start_urls = []
 
     def start_requests(self):
-        for page in range(1113):
+        for page in range(100):
             print(page)
             url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
             # url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
             # url = 'http://fzggw.zj.gov.cn/art/2020/8/26/art_1621004_55344873.html'
             url = 'https://s.bdstatic.com/common/openjs/amd/eslx.js'
-            yield Request(url, callback=self.parse, dont_filter=True)
+            yield Request(url, callback=self.parse, dont_filter=True, timeout=3)
 
     def parse(self, response: Response):
         print(threading.current_thread().name, "runing...", self.name)
-        print(f'#######{self.name}')
-        print(response.status)
-        yield Request(response.url, callback=self.parse2, dont_filter=True)
+        print(f'内容 {response.text}')
+        yield TestItem(response.text)
+        # for page in range(10):
+        #     print(page)
+        #     url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
+        #     # url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
+        #     # url = 'http://fzggw.zj.gov.cn/art/2020/8/26/art_1621004_55344873.html'
+        #     url = 'https://s.bdstatic.com/common/openjs/amd/eslx.js'
+        #     yield Request(url, callback=self.parse2, dont_filter=True, timeout=3)
+        # print(response.status)
+        # yield Request(response.url, callback=self.parse2, dont_filter=True)
 
     def parse2(self, response):
         print(response.status)
@@ -101,7 +116,7 @@ class ApiSpider(Spider):
 
     def start_requests(self):
         for i in range(1000):
-            yield Request(url="http://127.0.0.1:8000/", callback=self.parse,dont_filter=True
+            yield Request(url="http://127.0.0.1:8000/", callback=self.parse, dont_filter=True
                           )
 
     def parse(self, response: Response):
