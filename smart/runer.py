@@ -11,24 +11,15 @@ import inspect
 import sys
 import time
 from asyncio import CancelledError
+from concurrent.futures.thread import ThreadPoolExecutor
 from typing import List
 
-from smart import log
+from smart.log import log
 from smart.core import Engine
 from smart.middlewire import Middleware
 from smart.pipline import Piplines
+from smart.setting import gloable_setting_dict
 from smart.spider import Spider
-
-
-# def run(spider_name):
-#     spider_module = importlib.import_module(f'{spider_name}')
-#     spider = [x for x in inspect.getmembers(spider_module,
-#                                             predicate=lambda x: inspect.isclass(x)) if
-#               issubclass(x[1], Spider) and x[1] != Spider]
-#     if spider and len(spider) > 0:
-#         loop = asyncio.get_event_loop()
-#         core = Engine(spider[0][1])
-#         loop.run_until_complete(core.start())
 
 
 class CrawStater:
@@ -39,13 +30,33 @@ class CrawStater:
         else:
             # todo use  uvloop
             self.loop = loop or asyncio.new_event_loop()
+        thread_pool_max_size = gloable_setting_dict.get(
+            "thread_pool_max_size", 30)
+        loop.set_default_executor(ThreadPoolExecutor(thread_pool_max_size))
         asyncio.set_event_loop(loop)
         self.loop = loop
         self.cores = []
-        self.log = log.get_logger("smart-craw_stater")
+        self.log = log
         self.spider_names = []
 
-    def run_by_class_or_instance(self, spider, middlewire: Middleware = None, pipline: Piplines = None):
+    def run_many(self, spiders: List[Spider], middlewire: Middleware = None, pipline: Piplines = None):
+        if not spiders or len(spiders) <= 0:
+            raise ValueError("need spiders")
+        start = time.time()
+        for spider in spiders:
+            if isinstance(spider, Spider):
+                spider = spider.__class__
+            elif not issubclass(spider, Spider) or spider == Spider:
+                raise ValueError("need a  Spider class or Spider sub instance")
+            _middle = spider.cutome_setting_dict.get("middleware_instance") or middlewire
+            _pip = spider.cutome_setting_dict.get("piplines_instance") or pipline
+            core = Engine(spider, _middle, _pip)
+            self.cores.append(core)
+            self.spider_names.append(spider.name)
+        self._run()
+        self.log.info(f'craw succeed {",".join(self.spider_names)} ended.. it cost {time.time() - start}s')
+
+    def run_single(self, spider: Spider, middlewire: Middleware = None, pipline: Piplines = None):
         if not spider:
             raise ValueError("need a  Spider class or Spider sub instance")
         if isinstance(spider, Spider):
@@ -53,7 +64,9 @@ class CrawStater:
         elif not issubclass(spider, Spider) or spider == Spider:
             raise ValueError("need a  Spider class or Spider sub instance")
         start = time.time()
-        core = Engine(spider, middlewire, pipline)
+        _middle = spider.cutome_setting_dict.get("middleware_instance") or middlewire
+        _pip = spider.cutome_setting_dict.get("piplines_instance") or pipline
+        core = Engine(spider, _middle, _pip)
         self.cores.append(core)
         self.spider_names.append(spider.name)
         self._run()
@@ -71,7 +84,9 @@ class CrawStater:
             for tuple_item in spider:
                 if (not spider_names or len(spider_names) <= 0) \
                         or tuple_item[1].name in spider_names:
-                    core = Engine(tuple_item[1], middlewire, pipline)
+                    _middle = tuple_item[1].cutome_setting_dict.get("middleware_instance") or middlewire
+                    _pip = tuple_item[1].cutome_setting_dict.get("piplines_instance") or pipline
+                    core = Engine(tuple_item[1], _middle, _pip)
                     self.cores.append(core)
                     self.spider_names.append(tuple_item[1].name)
             self._run()
@@ -82,6 +97,16 @@ class CrawStater:
         for core in self.cores:
             self.loop.call_soon_threadsafe(core.close)
 
+    def pause(self):
+        self.log.info(f'warning pause be called,  {",".join(self.spider_names)} will pause ')
+        for core in self.cores:
+            self.loop.call_soon_threadsafe(core.pause)
+
+    def recover(self):
+        self.log.info(f'warning recover be called,  {",".join(self.spider_names)} will recover ')
+        for core in self.cores:
+            self.loop.call_soon_threadsafe(core.recover)
+
     def _run(self):
         tasks = []
         for core in self.cores:
@@ -90,5 +115,15 @@ class CrawStater:
             tasks.append(future)
         if len(tasks) <= 0:
             raise ValueError("can not finded spider tasks to start so ended...")
-        group_tasks = asyncio.gather(*tasks, loop=self.loop)
-        self.loop.run_until_complete(group_tasks)
+        try:
+            group_tasks = asyncio.gather(*tasks, loop=self.loop)
+            self.loop.run_until_complete(group_tasks)
+        except CancelledError as e:
+            pass
+        except KeyboardInterrupt as e2:
+            self.stop()
+        except BaseException:
+            pass
+        # finally:
+        #     if self.loop:
+        #         self.loop.close()

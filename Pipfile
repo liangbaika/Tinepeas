@@ -8,6 +8,7 @@ verify_ssl = true
 #fastapi = "*"
 #uvicorn = "*"
 #jinja2 = "*"
+pytest = "*"
 
 [packages]
 aiohttp = "*"
@@ -20,6 +21,8 @@ python-multipart = "*"
 ruia = "*"
 ruia-ua = "*"
 jsonpath = "*"
+parsel = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.7"

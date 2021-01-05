@@ -1,8 +1,6 @@
 import json
 import threading
 
-from lxml import etree
-
 from smart.item import Item
 from smart.response import Response
 from smart.request import Request
@@ -17,10 +15,10 @@ class TestItem(Item):
 class IpSpider(Spider):
     name = 'ipspider2'
     start_urls = []
+    cutome_setting_dict = {**Spider.cutome_setting_dict, **{"req_per_concurrent": 100}}
 
     def start_requests(self):
-        for page in range(100):
-            print(page)
+        for page in range(1000):
             url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
             # url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
             # url = 'http://fzggw.zj.gov.cn/art/2020/8/26/art_1621004_55344873.html'
@@ -28,9 +26,8 @@ class IpSpider(Spider):
             yield Request(url, callback=self.parse, dont_filter=True, timeout=3)
 
     def parse(self, response: Response):
-        print(threading.current_thread().name, "runing...", self.name)
-        print(f'内容 {response.text}')
-        yield TestItem(response.text)
+        pass
+        # yield TestItem(response.text)
         # for page in range(10):
         #     print(page)
         #     url = f'http://exercise.kingname.info/exercise_middleware_ip/{page}'
@@ -54,6 +51,9 @@ class IpSpider3(Spider):
     start_urls = []
 
     def on_start(self):
+        self.cutome_setting_dict.update({
+
+        })
         print('IpSpider22222 started')
 
     def start_requests(self):

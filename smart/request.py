@@ -14,13 +14,13 @@ class Request:
     url: str
     callback: Callable = None
     method: str = 'get'
-    timeout: float = 10.0
+    timeout: float = None
     encoding: str = 'utf-8'
     header: dict = None
     cookies: dict = None
     # post data
     data: any = None
-    # aiohttp requets kwargs..
+    # http requets kwargs..
     extras: dict = None
     # different callback functions can be delivered
     meta: dict = None

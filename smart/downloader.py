@@ -7,33 +7,96 @@
 # ------------------------------------------------------------------
 import asyncio
 import inspect
+from abc import ABC, abstractmethod
 from asyncio import Queue, QueueEmpty
 from contextlib import suppress
 from typing import Optional
 import aiohttp
 from concurrent.futures import TimeoutError
 
-from smart import log
+from smart.log import log
 from smart.middlewire import Middleware
 from smart.response import Response
 from smart.scheduler import Scheduler
+from smart.setting import gloable_setting_dict
 from .request import Request
+
+
+class BaseDown(ABC):
+
+    @abstractmethod
+    def fetch(self, request: Request) -> Response:
+        pass
+
+
+# class RequestsDown(BaseDown):
+#     def fetch(self, request: Request) -> Response:
+#         import requests
+#         res = requests.get(request.url,
+#                            timeout=request.timeout or 3,
+#                            )
+#         response = Response(body=res.content, request=request,
+#                             headers=res.headers,
+#                             cookies=res.cookies,
+#                             status=res.status_code)
+#         return response
+
+
+class AioHttpDown(BaseDown):
+
+    async def fetch(self, request: Request) -> Response:
+        async with aiohttp.ClientSession() as clicnt:
+            resp = await clicnt.request(request.method,
+                                        request.url,
+                                        timeout=request.timeout or 10,
+                                        headers=request.header or {},
+                                        cookies=request.cookies or {},
+                                        data=request.data or {},
+                                        **request.extras or {}
+                                        )
+            byte_content = await resp.read()
+            headers = {}
+            if resp.headers:
+                headers = {k: v for k, v in resp.headers.items()}
+            response = Response(body=byte_content,
+                                status=resp.status,
+                                headers=headers,
+                                cookies=resp.cookies
+                                )
+        return response
 
 
 class Downloader:
 
-    def __init__(self, scheduler: Scheduler, middwire: Middleware = None):
+    def __init__(self, scheduler: Scheduler, middwire: Middleware = None, seq=200, downer: BaseDown = AioHttpDown()):
         self.scheduler = scheduler
         self.middwire = middwire
         self.response_queue: asyncio.Queue = Queue()
         #  the file handle opens too_much to report an error
-        self.semaphore = asyncio.Semaphore(500)
+        self.semaphore = asyncio.Semaphore(seq)
         # starting from 0
-        self.max_retry = 3
-        self.log = log.get_logger("smart-downloader")
+        self.downer = downer
+        self.log = log
 
     async def download(self, request: Request):
-        if request and request.retry >= self.max_retry:
+        spider = request.__spider__
+        max_retry = spider.cutome_setting_dict.get("req_max_retry") or gloable_setting_dict.get(
+            "req_max_retry")
+        if max_retry <= 0:
+            raise ValueError("req_max_retry must >0")
+        header_dict = spider.cutome_setting_dict.get("default_headers") or gloable_setting_dict.get(
+            "default_headers")
+        req_timeout = request.timeout or spider.cutome_setting_dict.get("req_timeout") or gloable_setting_dict.get(
+            "req_timeout")
+        request.timeout = req_timeout
+        header = request.header or {}
+        request.header = header.update(header_dict)
+        request.header = header
+        ignore_response_codes = spider.cutome_setting_dict.get("ignore_response_codes") or gloable_setting_dict.get(
+            "ignore_response_codes")
+        req_delay = spider.cutome_setting_dict.get("req_delay") or gloable_setting_dict.get("req_delay")
+
+        if request and request.retry >= max_retry:
             # reached max retry times
             self.log.error(f'reached max retry times... {request}')
             return
@@ -47,63 +110,45 @@ class Downloader:
             async  with self.semaphore:
                 await self._beforeFetch(request)
 
-                fetch = self.fetch
+                fetch = self.downer.fetch
                 iscoroutinefunction = inspect.iscoroutinefunction(fetch)
                 # support sync or async request
-                if iscoroutinefunction:
-                    response = await fetch(request)
-                else:
-                    self.log.debug(f'fetch may be an snyc func  so it will run in executor ')
-                    response = await asyncio.get_event_loop() \
-                        .run_in_executor(None, fetch, request)
+                try:
+                    # req_delay
+                    if req_delay > 0:
+                        await asyncio.sleep(req_delay)
+                    self.log.info(
+                        f"send a request:  \r\n【 \r\n url: {request.url} \r\n method: {request.method} \r\n header: {request.header} \r\n 】")
 
-                await self._afterFetch(request, response)
+                    if iscoroutinefunction:
+                        response = await fetch(request)
+                    else:
+                        self.log.debug(f'fetch may be an snyc func  so it will run in executor ')
+                        response = await asyncio.get_event_loop() \
+                            .run_in_executor(None, fetch, request)
+                except TimeoutError as e:
+                    # delay retry
+                    self.scheduler.schedlue(request)
+                    self.log.debug(
+                        f'req  to fetch is timeout now so this req will dely to sechdule for retry {request.url}')
+                    return
+                except asyncio.CancelledError as e:
+                    self.log.debug(f' task is cancel..')
+                    return
+                except BaseException as e:
+                    self.log.error(f'occured some exception in downloader e:{e}')
+                    return
+                if response and response.status not in ignore_response_codes:
+                    await self._afterFetch(request, response)
 
-        if response:
-            response.__spider__ = request.__spider__
+        if response and response.status not in ignore_response_codes:
+            response.request = request
+            response.__spider__ = spider
             await self.response_queue.put(response)
 
     def get(self) -> Optional[Response]:
-        try:
-            resp = self.response_queue.get_nowait()
-        except QueueEmpty:
-            return None
-        return resp
-
-    async def fetch(self, request: Request) -> Response:
-        async with aiohttp.ClientSession() as clicnt:
-            try:
-                self.log.debug(f'url {request.url} will send a request to fetch resource ..')
-                resp = await clicnt.request(request.method,
-                                            request.url,
-                                            timeout=request.timeout or 10,
-                                            headers=request.header or {},
-                                            cookies=request.cookies or {},
-                                            data=request.data or {},
-                                            **request.extras or {}
-                                            )
-                byte_content = await resp.read()
-            except TimeoutError as e:
-                # delay retry
-                self.scheduler.schedlue(request)
-                self.log.debug(
-                    f'req  to fetch is timeout now so this req will dely to sechdule for retry {request.url}')
-                return
-            except asyncio.CancelledError as e:
-                self.log.error(f' task is cancel..')
-                return
-            except BaseException as e:
-                self.log.error(f'occured some exception in downloader e:{e}')
-                return
-        headers = {}
-        if resp.headers:
-            headers = {k: v for k, v in resp.headers.items()}
-        response = Response(body=byte_content, request=request,
-                            headers=headers,
-                            cookies=resp.cookies,
-                            status=resp.status)
-
-        return response
+        with suppress(QueueEmpty):
+            return self.response_queue.get_nowait()
 
     async def _beforeFetch(self, request):
         if self.middwire and len(self.middwire.request_middleware) > 0:
@@ -125,16 +170,3 @@ class Downloader:
                     else:
                         res = await asyncio.get_event_loop() \
                             .run_in_executor(None, item_tuple[1], request.__spider__, request, response)
-
-    # def fetch(self, request: Request) -> Response:
-    #     try:
-    #         res = requests.get(request.url,
-    #                            timeout=request.timeout or 3 ,
-    #                            )
-    #     except Exception as e:
-    #         return
-    #     response = Response(body=res.content, request=request,
-    #                         headers=res.headers,
-    #                         cookies=res.cookies,
-    #                         status=res.status_code)
-    #     return response

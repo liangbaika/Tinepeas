@@ -8,10 +8,21 @@
 from collections import deque
 from typing import Optional
 
-from smart import log
+from smart.log import log
 from smart.request import Request
 
 from abc import ABC, abstractmethod
+
+
+class BaseSchedulerContainer(ABC):
+
+    @abstractmethod
+    def push(self, request: Request):
+        pass
+
+    @abstractmethod
+    def pop(self) -> Optional[Request]:
+        pass
 
 
 class BaseDuplicateFilter(ABC):
@@ -49,14 +60,29 @@ class SampleDuplicateFilter(BaseDuplicateFilter):
         return len(self.set_container)
 
 
+class DequeSchedulerContainer(BaseSchedulerContainer):
+    def __init__(self):
+        self.url_queue = deque()
+
+    def push(self, request: Request):
+        self.url_queue.append(request)
+
+    def pop(self) -> Optional[Request]:
+        if self.url_queue:
+            return self.url_queue.popleft()
+        return None
+
+
 class Scheduler:
-    def __init__(self, duplicate_filter: BaseDuplicateFilter = None):
-        self.request_queue = deque()
+    def __init__(self, duplicate_filter: BaseDuplicateFilter = None,
+                 scheduler_container: BaseSchedulerContainer = None):
         if duplicate_filter is None:
             duplicate_filter = SampleDuplicateFilter()
+        if scheduler_container is None:
+            scheduler_container = DequeSchedulerContainer()
+        self.scheduler_container = scheduler_container
         self.duplicate_filter = duplicate_filter
-        self.log = log.get_logger("smart-scheduler")
-
+        self.log = log
 
     def schedlue(self, request: Request):
         self.log.debug(f"get a request {request} wating toschedlue ")
@@ -66,10 +92,8 @@ class Scheduler:
                 self.log.debug(f"duplicate_filter filted ... url{_url} ")
                 return
             self.duplicate_filter.add(_url)
-        self.request_queue.append(request)
+        self.scheduler_container.push(request)
 
     def get(self) -> Optional[Request]:
         self.log.debug(f"get a request to download task ")
-        if self.request_queue:
-            return self.request_queue.popleft()
-        return None
+        return self.scheduler_container.pop()
