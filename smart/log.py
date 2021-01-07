@@ -13,7 +13,9 @@ from traceback import format_exception
 
 from smart.setting import gloable_setting_dict
 
-LOG_FORMAT = " process %(process)d|thread %(threadName)s|%(asctime)s|%(filename)s|%(funcName)s|line:%(lineno)d|%(levelname)s| %(message)s"
+LOG_FORMAT = "process %(process)d|thread %(threadName)s|%(asctime)s|%(filename)s|%(funcName)s|line:%(lineno)d|%(levelname)s| %(message)s"
+CONSOLE_LOG_FORMAT = "%(colorName)sprocess %(process)d|thread %(threadName)s|%(asctime)s|%(filename)s|%(funcName)s|line:%(lineno)d|%(levelname)s| %(message)s %(colorName2)s"
+
 PRINT_EXCEPTION_DETAILS = True
 
 
@@ -22,7 +24,7 @@ PRINT_EXCEPTION_DETAILS = True
 # 现在 xxx.log xxx1.log xxx2.log  如果backupCount 是2位数时  则 01  02  03 三位数 001 002 .. 文件由近及远
 class RotatingFileHandler(BaseRotatingHandler):
     def __init__(
-        self, filename, mode="a", maxBytes=0, backupCount=0, encoding=None, delay=0
+            self, filename, mode="a", maxBytes=0, backupCount=0, encoding=None, delay=0
     ):
         # if maxBytes > 0:
         #    mode = 'a'
@@ -71,8 +73,20 @@ class RotatingFileHandler(BaseRotatingHandler):
         return 0
 
 
+class MyStreamHandler(logging.StreamHandler):
+
+    def emit(self, record):
+        if record.levelname in ["ERROR", "CRITICAL"]:
+            record.colorName = "\033[0;31m "
+            record.colorName2 = " \033[0m"
+        else:
+            record.colorName = "\033[0;34m "
+            record.colorName2 = " \033[0m"
+        super().emit(record)
+
+
 def get_logger(
-    name, path="", log_level="DEBUG", is_write_to_file=False, is_write_to_stdout=True
+        name, path="", log_level="DEBUG", is_write_to_file=False, is_write_to_stdout=True
 ):
     """
     @summary: 获取log
@@ -88,8 +102,9 @@ def get_logger(
 
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
-
+    # %(funcName)s
     formatter = logging.Formatter(LOG_FORMAT)
+    console_formatter = logging.Formatter(CONSOLE_LOG_FORMAT)
     if PRINT_EXCEPTION_DETAILS:
         formatter.formatException = lambda exc_info: format_exception(*exc_info)
 
@@ -104,9 +119,10 @@ def get_logger(
         rf_handler.setFormatter(formatter)
         logger.addHandler(rf_handler)
     if is_write_to_stdout:
-        stream_handler = logging.StreamHandler()
+        stream_handler = MyStreamHandler()
+        logger._console = stream_handler
         stream_handler.stream = sys.stdout
-        stream_handler.setFormatter(formatter)
+        stream_handler.setFormatter(console_formatter)
         logger.addHandler(stream_handler)
 
     _handler_list = []
@@ -168,9 +184,11 @@ for STOP_LOG in STOP_LOGS:
 # print(logging.Logger.manager.loggerDict) # 取使用debug模块的name
 
 # 日志级别大小关系为：critical > error > warning > info > debug
-log = get_logger(
+_log = get_logger(
     name=gloable_setting_dict.get("log_name"),
     path=gloable_setting_dict.get("log_path"),
     log_level=gloable_setting_dict.get("log_level").upper(),
     is_write_to_file=gloable_setting_dict.get("is_write_to_file"),
 )
+
+log = _log

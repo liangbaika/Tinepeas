@@ -44,10 +44,8 @@ class CrawStater:
             raise ValueError("need spiders")
         start = time.time()
         for spider in spiders:
-            if isinstance(spider, Spider):
-                spider = spider.__class__
-            elif not issubclass(spider, Spider) or spider == Spider:
-                raise ValueError("need a  Spider class or Spider sub instance")
+            if not isinstance(spider, Spider):
+                raise ValueError("need a   Spider sub instance")
             _middle = spider.cutome_setting_dict.get("middleware_instance") or middlewire
             _pip = spider.cutome_setting_dict.get("piplines_instance") or pipline
             core = Engine(spider, _middle, _pip)
@@ -59,10 +57,8 @@ class CrawStater:
     def run_single(self, spider: Spider, middlewire: Middleware = None, pipline: Piplines = None):
         if not spider:
             raise ValueError("need a  Spider class or Spider sub instance")
-        if isinstance(spider, Spider):
-            spider = spider.__class__
-        elif not issubclass(spider, Spider) or spider == Spider:
-            raise ValueError("need a  Spider class or Spider sub instance")
+        if not isinstance(spider, Spider):
+            raise ValueError("need a   Spider sub instance")
         start = time.time()
         _middle = spider.cutome_setting_dict.get("middleware_instance") or middlewire
         _pip = spider.cutome_setting_dict.get("piplines_instance") or pipline
@@ -86,9 +82,12 @@ class CrawStater:
                         or tuple_item[1].name in spider_names:
                     _middle = tuple_item[1].cutome_setting_dict.get("middleware_instance") or middlewire
                     _pip = tuple_item[1].cutome_setting_dict.get("piplines_instance") or pipline
-                    core = Engine(tuple_item[1], _middle, _pip)
+                    _spider = tuple_item[1]()
+                    if not isinstance(_spider, Spider):
+                        raise ValueError("need a   Spider sub instance")
+                    core = Engine(_spider, _middle, _pip)
                     self.cores.append(core)
-                    self.spider_names.append(tuple_item[1].name)
+                    self.spider_names.append(_spider.name)
             self._run()
             self.log.info(f'craw succeed {",".join(self.spider_names)} ended.. it cost {time.time() - start}s')
 
@@ -119,11 +118,9 @@ class CrawStater:
             group_tasks = asyncio.gather(*tasks, loop=self.loop)
             self.loop.run_until_complete(group_tasks)
         except CancelledError as e:
-            pass
+            self.log.debug(f" in loop, occured CancelledError e {e} ", exc_info=True)
         except KeyboardInterrupt as e2:
+            self.log.debug(f" in loop, occured KeyboardInterrupt e {e2} ")
             self.stop()
-        except BaseException:
-            pass
-        # finally:
-        #     if self.loop:
-        #         self.loop.close()
+        except BaseException as e3:
+            self.log.error(f" in loop, occured BaseException e {e3} ", exc_info=True)

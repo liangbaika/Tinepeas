@@ -117,7 +117,7 @@ class Downloader:
                     # req_delay
                     if req_delay > 0:
                         await asyncio.sleep(req_delay)
-                    self.log.info(
+                    self.log.debug(
                         f"send a request:  \r\n【 \r\n url: {request.url} \r\n method: {request.method} \r\n header: {request.header} \r\n 】")
 
                     if iscoroutinefunction:

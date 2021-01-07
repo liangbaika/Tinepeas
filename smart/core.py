@@ -9,9 +9,11 @@ import asyncio
 import importlib
 import inspect
 import time
+import traceback
 import uuid
 from asyncio import Lock
 from collections import deque
+from contextlib import suppress
 from typing import Dict
 
 from smart.log import log
@@ -28,36 +30,28 @@ class Engine:
         self.lock = None
         self.task_dict: Dict[str, asyncio.Task] = {}
         self.pip_task_dict: Dict[str, asyncio.Task] = {}
-        self.spider = spider()
+        self.spider = spider
         self.middlewire = middlewire
         self.piplines = pipline
-        # duplicate_filter_class
-        # scheduler_container_class
-        duplicate_filter_class_str = self.spider.cutome_setting_dict.get(
-            "duplicate_filter_class") or gloable_setting_dict.get(
-            "duplicate_filter_class")
-        scheduler_container_class_str = self.spider.cutome_setting_dict.get(
-            "scheduler_container_class") or gloable_setting_dict.get(
-            "scheduler_container_class")
-
-        duplicate_filter_module = importlib.import_module(".".join(duplicate_filter_class_str.split(".")[:-1]),
-                                                          )
-        duplicate_filter_class = getattr(duplicate_filter_module, duplicate_filter_class_str.split(".")[-1])
-        scheduler_container_module = importlib.import_module(".".join(scheduler_container_class_str.split(".")[:-1]))
-        scheduler_container_class = getattr(scheduler_container_module, scheduler_container_class_str.split(".")[-1])
+        duplicate_filter_class = self._get_dynamic_class_setting("duplicate_filter_class")
+        scheduler_container_class = self._get_dynamic_class_setting("scheduler_container_class")
+        net_download_class = self._get_dynamic_class_setting("net_download_class")
         self.scheduler = Scheduler(duplicate_filter_class(), scheduler_container_class())
         req_per_concurrent = self.spider.cutome_setting_dict.get("req_per_concurrent") or gloable_setting_dict.get(
             "req_per_concurrent")
-        net_download_class_str = self.spider.cutome_setting_dict.get("net_download_class") or gloable_setting_dict.get(
-            "net_download_class")
-        net_download_module = importlib.import_module(".".join(net_download_class_str.split(".")[:-1]),
-                                                      )
-        net_download_class = getattr(net_download_module, net_download_class_str.split(".")[-1])
         self.downloader = Downloader(self.scheduler, self.middlewire, seq=req_per_concurrent,
                                      downer=net_download_class())
         self.request_generator_queue = deque()
         self.stop = False
         self.log = log
+
+    def _get_dynamic_class_setting(self, key):
+        class_str = self.spider.cutome_setting_dict.get(
+            key) or gloable_setting_dict.get(
+            key)
+        _module = importlib.import_module(".".join(class_str.split(".")[:-1]))
+        _class = getattr(_module, class_str.split(".")[-1])
+        return _class
 
     def iter_request(self):
         while True:
@@ -69,8 +63,9 @@ class Engine:
             try:
                 # execute and get a request from cutomer code
                 # request=real_request_generator.send(None)
-                request = next(real_request_generator)
-                request.__spider__ = spider
+                request_or_item = next(real_request_generator)
+                if isinstance(request_or_item, Request):
+                    request_or_item.__spider__ = spider
             except StopIteration:
                 self.request_generator_queue.popleft()
                 continue
@@ -79,7 +74,7 @@ class Engine:
                 self.request_generator_queue.popleft()
                 self._handle_exception(spider, e)
                 continue
-            yield request
+            yield request_or_item
 
     def _check_complete_pip(self, task):
         if task.cancelled():
@@ -113,12 +108,12 @@ class Engine:
                 await asyncio.sleep(1)
                 continue
 
-            request_to_schedule = next(self.iter_request())
-            if isinstance(request_to_schedule, Request):
-                self.scheduler.schedlue(request_to_schedule)
+            request_or_item = next(self.iter_request())
+            if isinstance(request_or_item, Request):
+                self.scheduler.schedlue(request_or_item)
 
-            if isinstance(request_to_schedule, Item):
-                self._hand_piplines(self.spider, request_to_schedule)
+            if isinstance(request_or_item, Item):
+                self._hand_piplines(self.spider, request_or_item)
 
             request = self.scheduler.get()
             can_stop = self._check_can_stop(request)
@@ -151,7 +146,7 @@ class Engine:
         self.spider.state = "closed"
         self.spider.on_close()
         self.log.debug(f" engine stoped..")
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.15)
 
     def pause(self):
         self.log.info(f" out called pause.. so engine will pause.. ")
@@ -188,6 +183,7 @@ class Engine:
     def _handle_exception(self, spider, e):
         if spider:
             try:
+                self.log.error(f"  occured exceptyion e {e} ",exc_info=True)
                 spider.on_exception_occured(e)
             except BaseException:
                 pass

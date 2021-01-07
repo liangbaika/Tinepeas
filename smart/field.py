@@ -12,6 +12,8 @@ from typing import Union, Iterable, Callable, Any
 
 import jsonpath
 from lxml import etree
+from lxml.etree import _ElementUnicodeResult
+
 
 class BaseField:
 
@@ -22,27 +24,13 @@ class BaseField:
     def extract(self, *args, **kwargs):
         ...
 
-    # def __get__(self, instance, owner):
-    #     return instance.__dict__[self.key]
-    #
-    # def __delete__(self, instance):
-    #     instance.__dict__.pop(self.key)
-    #
-    # def __set__(self, instance, value):
-    #     # just check type  and null value is included
-    #     if not isinstance(value, self.type) and value is not None:
-    #         raise TypeError(
-    #             'occured some error, attribute<%s=%s> require a %s type,'
-    #             'please confirm a suitable type you gived' % (
-    #                 self.key, value, self.type.__name__))
-
 
 class _LxmlElementField(BaseField):
     def __init__(
             self,
             css_select: str = None,
             xpath_select: str = None,
-            default=None,
+            default='',
             many: bool = False,
     ):
         """
@@ -71,14 +59,14 @@ class _LxmlElementField(BaseField):
     def _parse_element(self, element):
         raise NotImplementedError
 
-    def extract(self, html_etree: Union[etree._Element, str]):
-        if html_etree is None:
+    def extract(self, html: Union[etree._Element, str]):
+        if html is None:
             raise ValueError("html_etree can not be null..")
 
-        if html_etree and isinstance(html_etree, str):
-            html_etree = etree.HTML(html)
+        if html and not isinstance(html, etree._Element):
+            html = etree.HTML(html)
 
-        elements = self._get_elements(html_etree=html_etree)
+        elements = self._get_elements(html_etree=html)
 
         # if is_source:
         #     return elements if self.many else elements[0]
@@ -133,7 +121,15 @@ class HtmlField(_LxmlElementField):
     """
 
     def _parse_element(self, element):
-        return etree.tostring(element, encoding="utf-8").decode(encoding="utf-8")
+        if element is None:
+            return None
+        if isinstance(element, _ElementUnicodeResult):
+            res = element.encode("utf-8").decode(encoding="utf-8")
+        else:
+            res = etree.tostring(element, encoding="utf-8").decode(encoding="utf-8")
+        if res:
+            res = res.strip()
+        return res
 
 
 class TextField(_LxmlElementField):
@@ -164,6 +160,8 @@ class JsonPathField(BaseField):
             html = json.loads(html)
         json_loads = html
         res = jsonpath.jsonpath(json_loads, self._json_path)
+        if res == False:
+            return self.default
         if self.many:
             if isinstance(res, Iterable):
                 return res
@@ -206,9 +204,11 @@ class RegexField(BaseField):
                 return groups[0] if len(groups) == 1 else groups
             return string
 
-    def extract(self, html: Union[str, etree._Element]):
+    def extract(self, html: Union[str, dict, etree._Element]):
         if isinstance(html, etree._Element):
             html = etree.tostring(html).decode(encoding="utf-8")
+        if isinstance(html, dict):
+            html = json.dumps(html, ensure_ascii=False)
         if self.many:
             matches = self._re_object.finditer(html)
             return [self._parse_match(match) for match in matches]
@@ -218,7 +218,7 @@ class RegexField(BaseField):
 
 
 class FuncField(BaseField):
-    def __init__(self, call: Callable, name: str = None, default="", many: bool = False):
+    def __init__(self, call: Callable, name: str, default="", many: bool = False):
         super(FuncField, self).__init__(default=default, many=many)
         self._callable = call
         if not callable(self._callable):
@@ -2327,3 +2327,4 @@ if __name__ == '__main__':
 </script>
     """
     res = AttrField("href", css_select='#list > dl > dd:nth-child(1) > a').extract(html)
+    print(res)

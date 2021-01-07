@@ -6,11 +6,23 @@
 # Desc:      there is a python file description
 # ------------------------------------------------------------------
 import copy
+import re
 from dataclasses import asdict, fields
 
+from smart.field import RegexField, BaseField, HtmlField
+from smart.item import Item
 from smart.request import Request
 from smart.response import Response
-from smart.tool import get_domain, get_index_url
+
+
+class TestItem(Item):
+    # target_item = RegexField("\d+")
+    age = RegexField("\d+", default="23222")
+
+    age2 = 33
+
+    def clean_age(self, value):
+        return value
 
 
 class TestClassOne(object):
@@ -24,8 +36,22 @@ class TestClassOne(object):
             res = response.xpath("//div[@class='xwt_a']//a/text()").getall()
             print(res)
 
+    def test_2(self):
+        item = TestItem.get_item(html="sa11123s11s23sasasa01")
+        print(item.results)
+        # for _item in item:
+        #     print(_item)
 
+        pass
+
+    def test3(self):
+        x = """
+        ss
+        """
+        title = RegexField(re_select='"title": "(.*?)",', re_flags=re.DOTALL).extract(x)
+        print(title)
+        print('\033[1;31;40m 1111111是1111111')
 
 
 if __name__ == '__main__':
-    TestClassOne().test_response()
+    TestClassOne().test3()

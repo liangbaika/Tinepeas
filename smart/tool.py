@@ -54,6 +54,8 @@ TIMER_TIME = 5
 
 redisdb = None
 
+CAMELCASE_INVALID_CHARS = re.compile(r'[^a-zA-Z\d]')
+
 
 # def get_redisdb():
 #     global redisdb
@@ -286,6 +288,19 @@ def get_urls(
 
         urls = use_urls
     return urls
+
+
+def string_camelcase(string):
+    """ Convert a word  to its CamelCase version and remove invalid chars
+
+    >>> string_camelcase('lost-pound')
+    'LostPound'
+
+    >>> string_camelcase('missing_images')
+    'MissingImages'
+
+    """
+    return CAMELCASE_INVALID_CHARS.sub('', string.title())
 
 
 def get_full_url(root_url, sub_url):

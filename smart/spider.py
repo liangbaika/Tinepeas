@@ -46,6 +46,15 @@ class Spider(SpiderHook):
         "ignore_response_codes": None,
         "middleware_instance": None,
         "piplines_instance": None,
+        # 请求url 去重处理器
+        # 自己实现需要继承 BaseDuplicateFilter 实现相关抽象方法 系统默认SampleDuplicateFilter
+        "duplicate_filter_class": "smart.scheduler.SampleDuplicateFilter",
+        # 请求url调度器容器
+        # 自己实现需要继承 BaseSchedulerContainer 实现相关抽象方法  系统默认DequeSchedulerContainer
+        "scheduler_container_class": "smart.scheduler.DequeSchedulerContainer",
+        # 请求网络的方法  输入 request  输出 response
+        # 自己实现需要继承 BaseDown 实现相关抽象方法  系统默认AioHttpDown
+        "net_download_class": "smart.downloader.AioHttpDown",
     }
 
     def start_requests(self):
