@@ -7,8 +7,9 @@
 # ------------------------------------------------------------------
 import json
 from dataclasses import dataclass
-from typing import List, Dict, Union, Any
+from typing import List, Dict, Union, Any, Optional
 
+import cchardet
 from jsonpath import jsonpath
 from parsel import Selector, SelectorList
 
@@ -46,43 +47,64 @@ class Response:
         return json.loads(self.text)
 
     def jsonpath(self, jsonpath_str) -> List:
-        return jsonpath(self.json(), jsonpath_str)
+        res = jsonpath(self.json(), jsonpath_str)
+        return [] if res == False else res
+
+    def get_base_url(self) -> str:
+        return get_index_url(self.url)
+
+    def urljoin(self, url) -> str:
+        if url is None or url == '':
+            raise ValueError("urljoin called, the url can not be empty")
+        schema_suffix = "http"
+        if url.startswith("%s" % schema_suffix):
+            return url
+        else:
+            basr_url = self.get_base_url()
+            return basr_url + url if url.startswith("/") else basr_url + "/" + url
+
+    def links(self) -> List[str]:
+        xpath = self.selector.xpath("//@href")
+        full_urls = []
+        for _item in xpath:
+            link = _item.get()
+            if link and "javascript:" not in link and len(link) > 1:
+                if self.request:
+                    link = self.urljoin(link)
+                full_urls.append(link)
+        return full_urls
 
     @property
-    def selector(self):
+    def selector(self) -> Selector:
         if not self._selector:
             self._selector = Selector(self.text)
         return self._selector
 
     @property
-    def text(self):
+    def content(self) -> bytes:
+        return self.body
+
+    @property
+    def text(self) -> Optional[str]:
         if not self.body:
             return None
+        # if request encoding is none and then  auto detect encoding
+        self.request.encoding = self.encoding or cchardet.detect(self.body)["encoding"]
+        # minimum possible may be UnicodeDecodeError
         return self.body.decode(self.encoding)
 
     @property
-    def url(self):
+    def url(self) -> str:
         return self.request.url
 
     @property
-    def meta(self):
+    def meta(self) -> Dict:
         return self.request.meta
 
     @property
-    def encoding(self):
+    def encoding(self) -> str:
         return self.request.encoding
 
-    def get_base_url(self):
-        return get_index_url(self.url)
-
-    def urljoin(self, url):
-        if url is None or url == '':
-            raise ValueError("urljoin  url can not be empty")
-        if url.startswith("http"):
-            return url
-        else:
-            basr_url = self.get_base_url()
-            if url.startswith("/"):
-                return basr_url + url
-            else:
-                return basr_url + "/" + url
+    @property
+    def ok(self) -> bool:
+        return self.status == 0 or 200 <= self.status <= 299

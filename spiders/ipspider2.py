@@ -110,13 +110,16 @@ class GovSpider(Spider):
 
 class ApiSpider(Spider):
     name = 'ApiSpider'
+    start_urls = [
+        "http://search.51job.com"
+    ]
 
     def on_start(self):
         print('ApiSpider started')
 
     def start_requests(self):
-        for i in range(1000):
-            yield Request(url="http://127.0.0.1:8000/", callback=self.parse, dont_filter=True
+        for i in range(1):
+            yield Request(url="http://search.51job.com", callback=self.parse, dont_filter=True,
                           )
 
     def parse(self, response: Response):

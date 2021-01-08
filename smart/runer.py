@@ -23,11 +23,14 @@ from smart.spider import Spider
 
 
 class CrawStater:
+    __version = "0.1.0"
 
     def __init__(self, loop=None):
         if sys.platform == "win32":
+            # avoid a certain extent: too many files error
             loop = loop or asyncio.ProactorEventLoop()
         else:
+            # uvloop  performance is better on  linux..
             # todo use  uvloop
             self.loop = loop or asyncio.new_event_loop()
         thread_pool_max_size = gloable_setting_dict.get(
@@ -114,6 +117,7 @@ class CrawStater:
             tasks.append(future)
         if len(tasks) <= 0:
             raise ValueError("can not finded spider tasks to start so ended...")
+        self._print_info()
         try:
             group_tasks = asyncio.gather(*tasks, loop=self.loop)
             self.loop.run_until_complete(group_tasks)
@@ -124,3 +128,25 @@ class CrawStater:
             self.stop()
         except BaseException as e3:
             self.log.error(f" in loop, occured BaseException e {e3} ", exc_info=True)
+
+    def _print_info(self):
+        self.log.info("good locky!")
+        self.log.info(
+            """
+                           _____                      _          _____       _     _           
+              / ____|                    | |        / ____|     (_)   | |          
+             | (___  _ __ ___   __ _ _ __| |_ _____| (___  _ __  _  __| | ___ _ __ 
+              \___ \| '_ ` _ \ / _` | '__| __|______\___ \| '_ \| |/ _` |/ _ \ '__|
+              ____) | | | | | | (_| | |  | |_       ____) | |_) | | (_| |  __/ |   
+             |_____/|_| |_| |_|\__,_|_|   \__|     |_____/| .__/|_|\__,_|\___|_|   
+                                                          | |                      
+                                                          |_|                      
+            
+            """
+        )
+        self.log.info(" \r\n smart-spider-framework"
+                      f"\r\n os: {sys.platform}"
+                      " \r\n author: liangbaiaki"
+                      " \r\n emial:1144388620@qq.com"
+                      " \r\n version: 0.1.0"
+                      )

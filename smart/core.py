@@ -81,11 +81,14 @@ class Engine:
             self.log.debug(f" a task canceld ")
             return
         if task and task.done() and task._key:
-            result = task.result()
-            if result:
-                if hasattr(task, '_index'):
-                    self._hand_piplines(task._spider, result, task._index + 1)
-            self.log.debug(f"a task done  ")
+            if task.exception():
+                self.log.error(f"a task  occurer error in pipline {task.exception()}  ")
+            else:
+                self.log.debug(f"a task done  ")
+                result = task.result()
+                if result and isinstance(result, Item):
+                    if hasattr(task, '_index'):
+                        self._hand_piplines(task._spider, result, task._index + 1)
             self.pip_task_dict.pop(task._key)
 
     def _check_complete_callback(self, task):
@@ -183,7 +186,7 @@ class Engine:
     def _handle_exception(self, spider, e):
         if spider:
             try:
-                self.log.error(f"  occured exceptyion e {e} ",exc_info=True)
+                self.log.error(f"  occured exceptyion e {e} ", exc_info=True)
                 spider.on_exception_occured(e)
             except BaseException:
                 pass

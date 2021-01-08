@@ -35,6 +35,7 @@ class TestClassOne(object):
             response = Response(data, 200, request)
             res = response.xpath("//div[@class='xwt_a']//a/text()").getall()
             print(res)
+            print(response.links())
 
     def test_2(self):
         item = TestItem.get_item(html="sa11123s11s23sasasa01")
@@ -54,4 +55,15 @@ class TestClassOne(object):
 
 
 if __name__ == '__main__':
-    TestClassOne().test3()
+    x = """
+   _____                      _          _____       _     _           
+  / ____|                    | |        / ____|     (_)   | |          
+ | (___  _ __ ___   __ _ _ __| |_ _____| (___  _ __  _  __| | ___ _ __ 
+  \___ \| '_ ` _ \ / _` | '__| __|______\___ \| '_ \| |/ _` |/ _ \ '__|
+  ____) | | | | | | (_| | |  | |_       ____) | |_) | | (_| |  __/ |   
+ |_____/|_| |_| |_|\__,_|_|   \__|     |_____/| .__/|_|\__,_|\___|_|   
+                                              | |                      
+                                              |_|                      
+
+    """
+    print(x)

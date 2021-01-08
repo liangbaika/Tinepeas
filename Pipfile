@@ -23,6 +23,11 @@ ruia-ua = "*"
 jsonpath = "*"
 parsel = "*"
 pytest = "*"
+pyppeteer = "*"
+pymysql = "*"
+aiomysql = "*"
+mkdocs = "*"
+cchardet = "*"
 
 [requires]
 python_version = "3.7"

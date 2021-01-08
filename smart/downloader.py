@@ -77,6 +77,7 @@ class Downloader:
         # starting from 0
         self.downer = downer
         self.log = log
+        self.log.info(f" downer loaded {self.downer.__class__.__name__}")
 
     async def download(self, request: Request):
         spider = request.__spider__
@@ -119,7 +120,7 @@ class Downloader:
                         await asyncio.sleep(req_delay)
                     self.log.debug(
                         f"send a request:  \r\n【 \r\n url: {request.url} \r\n method: {request.method} \r\n header: {request.header} \r\n 】")
-
+                    #
                     if iscoroutinefunction:
                         response = await fetch(request)
                     else:
@@ -138,10 +139,16 @@ class Downloader:
                 except BaseException as e:
                     self.log.error(f'occured some exception in downloader e:{e}')
                     return
-                if response and response.status not in ignore_response_codes:
+                if response is None or not isinstance(response, Response):
+                    self.log.error(
+                        f'the downer {self.downer.__class__.__name__} fetch function must return a response,that is a no-null response, and response must be a '
+                        'smart.Response instance or sub Response instance.  ')
+                    return
+
+                if response.status not in ignore_response_codes:
                     await self._afterFetch(request, response)
 
-        if response and response.status not in ignore_response_codes:
+        if response.status not in ignore_response_codes:
             response.request = request
             response.__spider__ = spider
             await self.response_queue.put(response)

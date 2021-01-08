@@ -15,7 +15,8 @@ class Request:
     callback: Callable = None
     method: str = 'get'
     timeout: float = None
-    encoding: str = 'utf-8'
+    # if None will auto detect encoding
+    encoding: str = None
     header: dict = None
     cookies: dict = None
     # post data
